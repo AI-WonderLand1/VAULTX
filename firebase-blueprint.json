@@ -1,0 +1,41 @@
+{
+  "collections": [
+    {
+      "name": "users",
+      "documentId": "uid",
+      "fields": {
+        "email": "string",
+        "idNumber": "string",
+        "pluginToken": "string",
+        "role": "string",
+        "createdAt": "timestamp"
+      }
+    },
+    {
+      "name": "secrets",
+      "documentId": "secretId",
+      "fields": {
+        "key": "string",
+        "value": "string (encrypted)",
+        "environment": "string",
+        "description": "string",
+        "createdAt": "timestamp",
+        "lastRotatedAt": "timestamp",
+        "tags": "array",
+        "ownerId": "string"
+      }
+    },
+    {
+      "name": "audit_logs",
+      "documentId": "logId",
+      "fields": {
+        "action": "string",
+        "details": "string",
+        "timestamp": "timestamp",
+        "userRole": "string",
+        "userId": "string",
+        "secretKey": "string"
+      }
+    }
+  ]
+}

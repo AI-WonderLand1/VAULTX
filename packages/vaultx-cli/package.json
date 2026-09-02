@@ -1,0 +1,12 @@
+{
+  "name": "vaultx-cli",
+  "version": "1.0.0",
+  "description": "VAULTX CLI Foundation",
+  "main": "src/index.ts",
+  "bin": {
+    "vaultx": "./bin/vaultx"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "VaultX Secrets Manager",
+  "description": "A local dashboard for securely managing environment variables, API keys, and RBAC with audit logs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
