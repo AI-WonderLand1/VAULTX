@@ -231,8 +231,8 @@ export function Auth() {
       </div>
       
       <div className="mt-8 text-[9px] text-gray-600 font-mono text-center flex gap-4">
-        <span className="text-green-500">FIPS 140-2 COMPLIANT</span>
-        <span className="text-blue-500">ENCRYPTION: AES-256-GCM</span>
+        <span className="text-green-500">SERVER-SIDE ENCRYPTION</span>
+        <span className="text-blue-500">AES-256-GCM AT REST</span>
       </div>
     </div>
   );
