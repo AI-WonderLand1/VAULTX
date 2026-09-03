@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Shield, Github, Mail, Key } from 'lucide-react';
-import CryptoJS from 'crypto-js';
 
 export function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -41,27 +40,8 @@ export function Auth() {
             password
           });
           if (error) throw error;
-          
-          if (data.user) {
-            // Generate unique credentials
-            const idNumber = Math.floor(10000000 + Math.random() * 90000000).toString(); // 8 digits
-            const pluginToken = CryptoJS.lib.WordArray.random(32).toString(CryptoJS.enc.Hex);
-            
-            try {
-              await supabase.from('users').insert([{
-                id: data.user.id,
-                email: email,
-                idNumber,
-                pluginToken,
-                role: 'Developer' // Default role
-              }]);
-            } catch (insertErr) {
-              console.warn('Could not insert user profile yet, may need email confirmation first.', insertErr);
-            }
-
-            if (!data.session) {
-              setSuccessMessage('Identity registered! Please check your email to confirm your account before logging in.');
-            }
+          if (data.user && !data.session) {
+            setSuccessMessage('Identity registered! Please check your email to confirm your account before logging in.');
           }
         }
       }
