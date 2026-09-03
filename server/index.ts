@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import express, { Request, Response } from 'express';
+import { rateLimit } from 'express-rate-limit';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -222,11 +223,27 @@ const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '256kb' }));
 
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 300,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: 'Too many API requests. Try again later.' },
+});
+
+const revealLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: 'Too many reveal requests. Try again in a minute.' },
+});
+
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'vaultx-api' });
 });
 
-app.get('/api/secrets', async (req, res) => {
+app.get('/api/secrets', apiLimiter, async (req, res) => {
   try {
     const auth = await authenticate(req, res);
     if (!auth) return;
@@ -248,7 +265,7 @@ app.get('/api/secrets', async (req, res) => {
   }
 });
 
-app.post('/api/secrets', async (req, res) => {
+app.post('/api/secrets', apiLimiter, async (req, res) => {
   try {
     const auth = await authenticate(req, res);
     if (!auth) return;
@@ -306,7 +323,7 @@ app.post('/api/secrets', async (req, res) => {
   }
 });
 
-app.get('/api/secrets/:id/reveal', async (req, res) => {
+app.get('/api/secrets/:id/reveal', revealLimiter, async (req, res) => {
   try {
     const auth = await authenticate(req, res);
     if (!auth) return;
@@ -357,7 +374,7 @@ app.get('/api/secrets/:id/reveal', async (req, res) => {
   }
 });
 
-app.patch('/api/secrets/:id', async (req, res) => {
+app.patch('/api/secrets/:id', apiLimiter, async (req, res) => {
   try {
     const auth = await authenticate(req, res);
     if (!auth) return;
@@ -465,7 +482,7 @@ app.patch('/api/secrets/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/secrets/:id', async (req, res) => {
+app.delete('/api/secrets/:id', apiLimiter, async (req, res) => {
   try {
     const auth = await authenticate(req, res);
     if (!auth) return;
@@ -512,7 +529,7 @@ app.delete('/api/secrets/:id', async (req, res) => {
   }
 });
 
-app.get('/api/audit-logs', async (req, res) => {
+app.get('/api/audit-logs', apiLimiter, async (req, res) => {
   try {
     const auth = await authenticate(req, res);
     if (!auth) return;
