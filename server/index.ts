@@ -7,7 +7,9 @@ import {
   createCipheriv,
   createDecipheriv,
   createHash,
+  createHmac,
   randomBytes,
+  timingSafeEqual,
 } from 'node:crypto';
 import {
   createClient,
@@ -39,6 +41,69 @@ if (!ENCRYPTION_SECRET) {
 const encryptionKey = /^[0-9a-fA-F]{64}$/.test(ENCRYPTION_SECRET)
   ? Buffer.from(ENCRYPTION_SECRET, 'hex')
   : createHash('sha256').update(ENCRYPTION_SECRET, 'utf8').digest();
+
+const stepUpKey = createHmac('sha256', encryptionKey)
+  .update('vaultx-step-up-v1')
+  .digest();
+
+type StepUpClaims = {
+  sub: string;
+  action: 'delete';
+  secretId: string;
+  exp: number;
+};
+
+function createStepUpToken(userId: string, secretId: string) {
+  const claims: StepUpClaims = {
+    sub: userId,
+    action: 'delete',
+    secretId,
+    exp: Date.now() + 2 * 60 * 1000,
+  };
+  const payload = Buffer.from(JSON.stringify(claims)).toString('base64url');
+  const signature = createHmac('sha256', stepUpKey)
+    .update(payload)
+    .digest('base64url');
+  return `${payload}.${signature}`;
+}
+
+function verifyStepUpToken(token: string, userId: string, secretId: string) {
+  const [payload, suppliedSignature] = token.split('.');
+  if (!payload || !suppliedSignature) return false;
+
+  const expectedSignature = createHmac('sha256', stepUpKey)
+    .update(payload)
+    .digest();
+
+  let supplied: Buffer;
+  try {
+    supplied = Buffer.from(suppliedSignature, 'base64url');
+  } catch {
+    return false;
+  }
+
+  if (
+    supplied.length !== expectedSignature.length ||
+    !timingSafeEqual(supplied, expectedSignature)
+  ) {
+    return false;
+  }
+
+  try {
+    const claims = JSON.parse(
+      Buffer.from(payload, 'base64url').toString('utf8'),
+    ) as StepUpClaims;
+
+    return (
+      claims.sub === userId &&
+      claims.action === 'delete' &&
+      claims.secretId === secretId &&
+      claims.exp >= Date.now()
+    );
+  } catch {
+    return false;
+  }
+}
 
 function encrypt(plaintext: string): string {
   const iv = randomBytes(12);
@@ -239,8 +304,97 @@ const revealLimiter = rateLimit({
   message: { error: 'Too many reveal requests. Try again in a minute.' },
 });
 
+const stepUpLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  limit: 5,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: 'Too many password verification attempts. Try again later.' },
+});
+
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'vaultx-api' });
+});
+
+app.post('/api/auth/step-up/delete', stepUpLimiter, async (req, res) => {
+  try {
+    const auth = await authenticate(req, res);
+    if (!auth) return;
+
+    const { password, secretId } = req.body || {};
+    if (
+      typeof password !== 'string' ||
+      !password ||
+      typeof secretId !== 'string' ||
+      !secretId
+    ) {
+      res.status(400).json({ error: 'Password and secret are required.' });
+      return;
+    }
+
+    const provider = auth.user.app_metadata?.provider;
+    if (provider && provider !== 'email') {
+      res.status(400).json({
+        error:
+          'This account does not use password login. Delete is blocked until this sign-in method is reverified.',
+      });
+      return;
+    }
+
+    const { data: target, error: targetError } = await auth.client
+      .from('secrets')
+      .select('id')
+      .eq('id', secretId)
+      .eq('owner_id', auth.user.id)
+      .maybeSingle();
+
+    if (targetError) {
+      res.status(400).json({ error: targetError.message });
+      return;
+    }
+    if (!target) {
+      res.status(404).json({ error: 'Secret not found.' });
+      return;
+    }
+
+    if (!auth.user.email) {
+      res.status(400).json({ error: 'This account has no email to verify.' });
+      return;
+    }
+
+    const verifier = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
+
+    const {
+      data: verification,
+      error: verificationError,
+    } = await verifier.auth.signInWithPassword({
+      email: auth.user.email,
+      password,
+    });
+
+    if (
+      verificationError ||
+      !verification.user ||
+      verification.user.id !== auth.user.id
+    ) {
+      res.status(401).json({ error: 'Current password is incorrect.' });
+      return;
+    }
+
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    res.json({
+      token: createStepUpToken(auth.user.id, secretId),
+      expiresInSeconds: 120,
+    });
+  } catch {
+    res.status(500).json({ error: 'Password verification failed.' });
+  }
 });
 
 app.get('/api/secrets', apiLimiter, async (req, res) => {
@@ -486,6 +640,14 @@ app.delete('/api/secrets/:id', apiLimiter, async (req, res) => {
   try {
     const auth = await authenticate(req, res);
     if (!auth) return;
+
+    const stepUpToken = req.header('x-vaultx-step-up') || '';
+    if (!verifyStepUpToken(stepUpToken, auth.user.id, req.params.id)) {
+      res.status(403).json({
+        error: 'Recent password verification is required to delete this secret.',
+      });
+      return;
+    }
 
     const { data: existing, error: existingError } = await auth.client
       .from('secrets')
