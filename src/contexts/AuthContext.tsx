@@ -4,8 +4,6 @@ import { supabase } from '../lib/supabase';
 export interface AppUser {
   uid: string;
   email: string;
-  idNumber: string;
-  pluginToken: string;
   role: 'Admin' | 'Developer' | 'Viewer';
 }
 
@@ -23,8 +21,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const fetchProfile = async (userId: string, email: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .single();
+
+      if (error || !data) {
+        console.error('VAULTX profile lookup failed:', error);
+        setCurrentUser({
+          uid: userId,
+          email,
+          role: 'Viewer',
+        });
+        return;
+      }
+
+      setCurrentUser({
+        uid: userId,
+        email,
+        role: data.role || 'Viewer',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    // Get initial session
     supabase.auth.getSession()
       .then(({ data: { session }, error }) => {
         if (error) {
@@ -35,7 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         if (session?.user) {
-          fetchUserRole(session.user.id, session.user.email || '');
+          void fetchProfile(session.user.id, session.user.email || '');
         } else {
           setCurrentUser(null);
           setLoading(false);
@@ -47,61 +72,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoading(false);
       });
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
-        fetchUserRole(session.user.id, session.user.email || '');
+        void fetchProfile(session.user.id, session.user.email || '');
       } else {
         setCurrentUser(null);
         setLoading(false);
       }
     });
 
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
-
-  const fetchUserRole = async (userId: string, email: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single();
-      
-      if (data) {
-        setCurrentUser({
-          uid: userId,
-          email: email,
-          idNumber: data.idNumber,
-          pluginToken: data.pluginToken,
-          role: data.role || 'Viewer'
-        });
-      } else {
-        // Fallback if user row hasn't been created yet or RLS blocks it
-        setCurrentUser({
-          uid: userId,
-          email: email,
-          idNumber: 'PENDING-ID',
-          pluginToken: 'PENDING-TOKEN',
-          role: 'Developer'
-        });
-      }
-    } catch (e) {
-      console.error('Error fetching user role:', e);
-      // Fallback on error to prevent being trapped on login screen
-      setCurrentUser({
-        uid: userId,
-        email: email,
-        idNumber: 'PENDING-ID',
-        pluginToken: 'PENDING-TOKEN',
-        role: 'Developer'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const logout = async () => {
     await supabase.auth.signOut();
