@@ -25,14 +25,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        fetchUserRole(session.user.id, session.user.email || '');
-      } else {
+    supabase.auth.getSession()
+      .then(({ data: { session }, error }) => {
+        if (error) {
+          console.error('Supabase session error:', error);
+          setCurrentUser(null);
+          setLoading(false);
+          return;
+        }
+
+        if (session?.user) {
+          fetchUserRole(session.user.id, session.user.email || '');
+        } else {
+          setCurrentUser(null);
+          setLoading(false);
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to initialize Supabase session:', error);
         setCurrentUser(null);
         setLoading(false);
-      }
-    });
+      });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -96,7 +109,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   return (
     <AuthContext.Provider value={{ currentUser, loading, logout }}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };
