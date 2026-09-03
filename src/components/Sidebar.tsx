@@ -85,8 +85,8 @@ export function Sidebar({ currentTab, setCurrentTab, environmentFilter, setEnvir
       
       <div className="p-4">
         <div className="bg-[#0F1115] border border-[#1F2937] rounded-lg p-3 text-[10px] text-gray-400">
-          <p className="font-bold text-gray-300 mb-1 flex items-center gap-2 uppercase tracking-wider text-[9px]"><Lock className="w-3 h-3 text-blue-500" /> End-to-End Encrypted</p>
-          <p className="leading-relaxed text-gray-500">Local simulated dashboard. Data stored securely in browser state.</p>
+          <p className="font-bold text-gray-300 mb-1 flex items-center gap-2 uppercase tracking-wider text-[9px]"><Lock className="w-3 h-3 text-blue-500" /> Server-Side Encrypted</p>
+          <p className="leading-relaxed text-gray-500">Secret values are encrypted at rest by the VAULTX server with AES-256-GCM.</p>
         </div>
       </div>
     </div>
