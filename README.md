@@ -1,20 +1,78 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# VAULTX Secrets Manager
 
-# Run and deploy your AI Studio app
+VAULTX is a React/Vite dashboard with a Node/Express API and a TypeScript CLI.
 
-This contains everything you need to run your app locally.
+## Security boundary
 
-View your app in AI Studio: https://ai.studio/apps/d2108d2b-b6dc-4689-b661-8f8ad712edcf
+Secret values are encrypted and decrypted only by the VAULTX server using AES-256-GCM.
 
-## Run Locally
+`VAULTX_ENCRYPTION_KEY` is server-only. It must never use the `VITE_` prefix.
 
-**Prerequisites:**  Node.js
+The browser keeps only public Supabase configuration:
 
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+
+The VAULTX API validates the signed-in user's Supabase session and performs secret operations server-side.
+
+## Local development
 
 1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+
+   ```bash
+   npm install
+   ```
+
+2. Create `.env.local` from `.env.example` and set:
+
+   ```env
+   VITE_SUPABASE_URL=...
+   VITE_SUPABASE_ANON_KEY=...
+   VAULTX_ENCRYPTION_KEY=...
+   ```
+
+3. Generate the encryption key if needed:
+
+   ```bash
+   openssl rand -hex 32
+   ```
+
+4. Start the VAULTX API in terminal 1:
+
+   ```bash
+   npm run dev:server
+   ```
+
+5. Start Vite in terminal 2:
+
+   ```bash
+   npm run dev
+   ```
+
+The Vite development server proxies `/api` to `http://localhost:8787`.
+
+## Production
+
+Build the frontend:
+
+```bash
+npm run build
+```
+
+Then run the combined VAULTX server:
+
+```bash
+npm start
+```
+
+The deployment runtime must provide `VAULTX_ENCRYPTION_KEY`. A GitHub Actions secret is safe only if your deployment workflow passes it to the server runtime; it must never be passed into a `VITE_*` build variable.
+
+## CLI
+
+The CLI lives in `packages/vaultx-cli`.
+
+```bash
+npx tsx packages/vaultx-cli/src/index.ts
+```
+
+Plugin-token authentication is still under development and is separate from the dashboard's Supabase login.
