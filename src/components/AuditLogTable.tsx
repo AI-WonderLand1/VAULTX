@@ -9,6 +9,13 @@ interface AuditLogTableProps {
 }
 
 export function AuditLogTable({ logs }: AuditLogTableProps) {
+  const formatTimestamp = (timestamp: string) => {
+    const date = new Date(timestamp);
+    return Number.isNaN(date.getTime())
+      ? 'Unknown'
+      : format(date, 'yyyy-MM-dd HH:mm:ss');
+  };
+
   const getActionIcon = (action: string) => {
     switch (action) {
       case 'CREATED': return <Plus className="w-4 h-4 text-emerald-400" />;
@@ -58,7 +65,7 @@ export function AuditLogTable({ logs }: AuditLogTableProps) {
           {logs.map(log => (
             <tr key={log.id} className="border-b border-[#1F2937] hover:bg-blue-500/5 transition-colors cursor-default">
               <td className="px-4 py-3 text-gray-500 text-[10px] font-mono">
-                {format(new Date(log.timestamp), 'yyyy-MM-dd HH:mm:ss')}
+                {formatTimestamp(log.timestamp)}
               </td>
               <td className="px-4 py-3">
                 <div className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[9px] font-bold border uppercase tracking-wider", getActionColor(log.action))}>
