@@ -170,9 +170,9 @@ export function SecretsTable({ secrets, currentRole, onEdit, onRotate, onDelete,
                     </button>
                     <button 
                       onClick={() => onDelete(secret)}
-                      disabled={currentRole !== 'Admin'}
+                      disabled={!editable}
                       className="p-1 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-                      title="Delete secret (Admin only)"
+                      title={editable ? "Delete secret" : "You do not have permission to delete this secret"}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
