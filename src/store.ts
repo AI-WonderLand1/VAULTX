@@ -57,8 +57,11 @@ export function useSecretsManager() {
       method: 'POST',
       body: JSON.stringify({
         key: secretData.key,
+        provider: secretData.provider,
+        type: secretData.type,
         environment: secretData.environment,
         description: secretData.description,
+        tags: secretData.tags || [],
         fields: secretData.fields || {},
       }),
     });
@@ -73,8 +76,11 @@ export function useSecretsManager() {
       method: 'PATCH',
       body: JSON.stringify({
         key: updates.key,
+        provider: updates.provider,
+        type: updates.type,
         environment: updates.environment,
         description: updates.description,
+        tags: updates.tags,
         fields: updates.fields,
       }),
     });
@@ -109,14 +115,15 @@ export function useSecretsManager() {
     await refresh();
   };
 
-  const logAccess = async (id: string) => {
-    if (!currentUser) return;
+  const revealSecret = async (id: string) => {
+    if (!currentUser) throw new Error('You must be signed in.');
 
-    await vaultxApi(`/api/secrets/${id}/access`, {
-      method: 'POST',
-    });
+    const data = await vaultxApi<{ fields: Record<string, string> }>(
+      `/api/secrets/${id}/reveal`,
+    );
 
     await fetchLogs();
+    return data.fields;
   };
 
   return {
@@ -129,6 +136,6 @@ export function useSecretsManager() {
     updateSecret,
     rotateSecret,
     deleteSecret,
-    logAccess,
+    revealSecret,
   };
 }
