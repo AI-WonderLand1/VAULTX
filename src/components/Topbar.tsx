@@ -49,9 +49,6 @@ export function Topbar({ searchQuery, setSearchQuery, currentRole, onNewSecret, 
               <span className="bg-blue-500/10 text-blue-500 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase">
                 {currentRole}
               </span>
-              <span className="text-[9px] text-gray-400 font-mono">
-                ID: {currentUser?.idNumber}
-              </span>
             </div>
           </div>
           
