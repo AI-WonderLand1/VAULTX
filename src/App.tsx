@@ -21,7 +21,7 @@ export default function App() {
     updateSecret,
     rotateSecret,
     deleteSecret,
-    logAccess,
+    revealSecret,
   } = useSecretsManager();
 
   const [currentTab, setCurrentTab] = useState<'secrets' | 'logs'>('secrets');
@@ -61,9 +61,14 @@ export default function App() {
     setIsSecretModalOpen(true);
   };
 
-  const handleOpenEdit = (secret: Secret) => {
-    setEditingSecret(secret);
-    setIsSecretModalOpen(true);
+  const handleOpenEdit = async (secret: Secret) => {
+    try {
+      const fields = await revealSecret(secret.id);
+      setEditingSecret({ ...secret, fields });
+      setIsSecretModalOpen(true);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to load secret.');
+    }
   };
 
   const handleSaveSecret = (data: any) => {
@@ -137,7 +142,7 @@ export default function App() {
                     deleteSecret(s.id);
                   }
                 }}
-                onLogAccess={logAccess}
+                onReveal={revealSecret}
               />
             ) : (
               <AuditLogTable logs={filteredLogs} />
