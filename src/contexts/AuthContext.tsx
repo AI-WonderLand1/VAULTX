@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
 export interface AppUser {
@@ -84,9 +84,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => subscription.unsubscribe();
   }, []);
 
-  const logout = async () => {
-    await supabase.auth.signOut();
-  };
+  const logout = useCallback(async () => {
+    setCurrentUser(null);
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      console.error('Supabase sign out failed:', error);
+    }
+  }, []);
 
   return (
     <AuthContext.Provider value={{ currentUser, loading, logout }}>

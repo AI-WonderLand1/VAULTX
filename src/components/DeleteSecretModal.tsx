@@ -20,11 +20,20 @@ export function DeleteSecretModal({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (secret) {
+    const clearSensitiveState = () => {
       setPassword('');
       setError('');
       setLoading(false);
-    }
+    };
+
+    window.addEventListener('vaultx:lock', clearSensitiveState);
+    return () => window.removeEventListener('vaultx:lock', clearSensitiveState);
+  }, []);
+
+  useEffect(() => {
+    setPassword('');
+    setError('');
+    setLoading(false);
   }, [secret]);
 
   if (!secret) return null;

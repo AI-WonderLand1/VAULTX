@@ -42,6 +42,18 @@ export function SecretModal({ isOpen, onClose, onSave, initialData }: SecretModa
   const [description, setDescription] = useState('');
 
   useEffect(() => {
+    const clearSensitiveState = () => {
+      setKey('');
+      setProvider('');
+      setFields([]);
+      setDescription('');
+    };
+
+    window.addEventListener('vaultx:lock', clearSensitiveState);
+    return () => window.removeEventListener('vaultx:lock', clearSensitiveState);
+  }, []);
+
+  useEffect(() => {
     if (isOpen) {
       if (initialData) {
         setKey(initialData.key);

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { SecretsTable } from './components/SecretsTable';
@@ -10,9 +10,10 @@ import { useSecretsManager } from './store';
 import { Environment, Secret, Role } from './types';
 import { useAuth } from './contexts/AuthContext';
 import { Auth } from './components/Auth';
+import { useInactivityLogout } from './hooks/useInactivityLogout';
 
 export default function App() {
-  const { currentUser, loading } = useAuth();
+  const { currentUser, loading, logout } = useAuth();
   const {
     secrets,
     logs,
@@ -35,9 +36,21 @@ export default function App() {
   const [isRotateModalOpen, setIsRotateModalOpen] = useState(false);
   const [rotatingSecret, setRotatingSecret] = useState<Secret | null>(null);
   const [deletingSecret, setDeletingSecret] = useState<Secret | null>(null);
+  const sensitiveOperationGeneration = useRef(0);
+
+  const lockAndLogout = useCallback(async () => {
+    window.dispatchEvent(new Event('vaultx:lock'));
+    await logout();
+  }, [logout]);
+
+  useInactivityLogout({
+    enabled: Boolean(currentUser),
+    onInactive: lockAndLogout,
+  });
 
   useEffect(() => {
     const clearSensitiveState = () => {
+      sensitiveOperationGeneration.current += 1;
       setEditingSecret(null);
       setRotatingSecret(null);
       setDeletingSecret(null);
@@ -88,8 +101,12 @@ export default function App() {
   };
 
   const handleOpenEdit = async (secret: Secret) => {
+    const requestGeneration = sensitiveOperationGeneration.current;
+
     try {
       const fields = await revealSecret(secret.id);
+      if (requestGeneration !== sensitiveOperationGeneration.current) return;
+
       setEditingSecret({ ...secret, fields });
       setIsSecretModalOpen(true);
     } catch (error) {
@@ -117,8 +134,12 @@ export default function App() {
   const handleConfirmDelete = async (password: string) => {
     if (!deletingSecret) return;
 
-    const approval = await requestDeleteApproval(deletingSecret.id, password);
-    await deleteSecret(deletingSecret.id, approval.token);
+    const requestGeneration = sensitiveOperationGeneration.current;
+    const secretId = deletingSecret.id;
+    const approval = await requestDeleteApproval(secretId, password);
+    if (requestGeneration !== sensitiveOperationGeneration.current) return;
+
+    await deleteSecret(secretId, approval.token);
     setDeletingSecret(null);
   };
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Eye,
   EyeOff,
@@ -35,6 +35,20 @@ export function SecretsTable({
   const [revealLoading, setRevealLoading] = useState<Set<string>>(new Set());
   const [revealError, setRevealError] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState<string | null>(null);
+  const revealGeneration = useRef(0);
+
+  useEffect(() => {
+    const clearRevealedValues = () => {
+      revealGeneration.current += 1;
+      setRevealedFields({});
+      setRevealLoading(new Set());
+      setRevealError({});
+      setCopied(null);
+    };
+
+    window.addEventListener('vaultx:lock', clearRevealedValues);
+    return () => window.removeEventListener('vaultx:lock', clearRevealedValues);
+  }, []);
 
   const toggleReveal = async (id: string) => {
     if (currentRole === 'Viewer') return;
@@ -60,14 +74,20 @@ export function SecretsTable({
       return next;
     });
 
+    const requestGeneration = revealGeneration.current;
+
     try {
       const fields = await onReveal(id);
-      setRevealedFields((current) => ({ ...current, [id]: fields }));
+      if (requestGeneration === revealGeneration.current) {
+        setRevealedFields((current) => ({ ...current, [id]: fields }));
+      }
     } catch (error) {
-      setRevealError((current) => ({
-        ...current,
-        [id]: error instanceof Error ? error.message : 'Failed to reveal secret.',
-      }));
+      if (requestGeneration === revealGeneration.current) {
+        setRevealError((current) => ({
+          ...current,
+          [id]: error instanceof Error ? error.message : 'Failed to reveal secret.',
+        }));
+      }
     } finally {
       setRevealLoading((current) => {
         const next = new Set(current);

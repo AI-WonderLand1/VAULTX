@@ -13,6 +13,13 @@ export function RotateModal({ isOpen, onClose, onConfirm, secret }: RotateModalP
   const [fields, setFields] = useState<{key: string, value: string}[]>([]);
 
   useEffect(() => {
+    const clearSensitiveState = () => setFields([]);
+
+    window.addEventListener('vaultx:lock', clearSensitiveState);
+    return () => window.removeEventListener('vaultx:lock', clearSensitiveState);
+  }, []);
+
+  useEffect(() => {
     if (isOpen && secret) {
       if (secret.fieldNames && secret.fieldNames.length > 0) {
         setFields(secret.fieldNames.map((key) => ({ key, value: '' })));
