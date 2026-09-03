@@ -14,10 +14,10 @@ export function RotateModal({ isOpen, onClose, onConfirm, secret }: RotateModalP
 
   useEffect(() => {
     if (isOpen && secret) {
-      if (secret.fields && Object.keys(secret.fields).length > 0) {
-        setFields(Object.entries(secret.fields).map(([k, v]) => ({ key: k, value: '' })));
-      } else if (secret.value) {
-        setFields([{ key: 'value', value: '' }]);
+      if (secret.fieldNames && secret.fieldNames.length > 0) {
+        setFields(secret.fieldNames.map((key) => ({ key, value: '' })));
+      } else if (secret.fields && Object.keys(secret.fields).length > 0) {
+        setFields(Object.keys(secret.fields).map((key) => ({ key, value: '' })));
       } else {
         setFields([{ key: 'key', value: '' }]);
       }
@@ -49,7 +49,7 @@ export function RotateModal({ isOpen, onClose, onConfirm, secret }: RotateModalP
           </button>
         </div>
         
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} autoComplete="off" className="p-6 space-y-4">
           <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-3 flex gap-3 text-[10px] text-orange-200">
             <AlertTriangle className="w-4 h-4 text-orange-500 shrink-0" />
             <p>You are about to rotate the credentials for <strong className="font-mono text-white">{secret.key}</strong> in <strong>{secret.environment}</strong>. This action will be logged.</p>
@@ -62,6 +62,11 @@ export function RotateModal({ isOpen, onClose, onConfirm, secret }: RotateModalP
                 <input
                   required
                   type="password"
+                  name={`vaultx-rotate-value-${idx}`}
+                  autoComplete="new-password"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                  spellCheck={false}
                   value={field.value}
                   onChange={(e) => {
                     const newFields = [...fields];
