@@ -125,7 +125,7 @@ export function SecretModal({ isOpen, onClose, onSave, initialData }: SecretModa
           </button>
         </div>
         
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4">
+        <form onSubmit={handleSubmit} autoComplete="off" className="p-6 overflow-y-auto space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Credential Type</label>
@@ -197,6 +197,7 @@ export function SecretModal({ isOpen, onClose, onSave, initialData }: SecretModa
                   <input
                     type="text"
                     required
+                    autoComplete="off"
                     value={field.key}
                     onChange={(e) => updateField(idx, e.target.value, field.value)}
                     placeholder="Field Name"
@@ -205,6 +206,11 @@ export function SecretModal({ isOpen, onClose, onSave, initialData }: SecretModa
                   <input
                     type="password"
                     required
+                    name={`vaultx-secret-value-${idx}`}
+                    autoComplete="new-password"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    spellCheck={false}
                     value={field.value}
                     onChange={(e) => updateField(idx, field.key, e.target.value)}
                     placeholder="Secret Value"
