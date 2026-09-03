@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { SecretsTable } from './components/SecretsTable';
 import { AuditLogTable } from './components/AuditLogTable';
 import { SecretModal } from './components/SecretModal';
 import { RotateModal } from './components/RotateModal';
+import { DeleteSecretModal } from './components/DeleteSecretModal';
 import { useSecretsManager } from './store';
 import { Environment, Secret, Role } from './types';
 import { useAuth } from './contexts/AuthContext';
@@ -20,6 +21,7 @@ export default function App() {
     addSecret,
     updateSecret,
     rotateSecret,
+    requestDeleteApproval,
     deleteSecret,
     revealSecret,
   } = useSecretsManager();
@@ -32,6 +34,30 @@ export default function App() {
   const [editingSecret, setEditingSecret] = useState<Secret | null>(null);
   const [isRotateModalOpen, setIsRotateModalOpen] = useState(false);
   const [rotatingSecret, setRotatingSecret] = useState<Secret | null>(null);
+  const [deletingSecret, setDeletingSecret] = useState<Secret | null>(null);
+
+  useEffect(() => {
+    const clearSensitiveState = () => {
+      setEditingSecret(null);
+      setRotatingSecret(null);
+      setDeletingSecret(null);
+      setIsSecretModalOpen(false);
+      setIsRotateModalOpen(false);
+    };
+
+    window.addEventListener('vaultx:lock', clearSensitiveState);
+    return () => window.removeEventListener('vaultx:lock', clearSensitiveState);
+  }, []);
+
+  useEffect(() => {
+    if (!currentUser) {
+      setEditingSecret(null);
+      setRotatingSecret(null);
+      setDeletingSecret(null);
+      setIsSecretModalOpen(false);
+      setIsRotateModalOpen(false);
+    }
+  }, [currentUser]);
 
   const filteredSecrets = useMemo(() => {
     return secrets.filter(secret => {
@@ -88,6 +114,14 @@ export default function App() {
     rotateSecret(id, newFields);
   };
 
+  const handleConfirmDelete = async (password: string) => {
+    if (!deletingSecret) return;
+
+    const approval = await requestDeleteApproval(deletingSecret.id, password);
+    await deleteSecret(deletingSecret.id, approval.token);
+    setDeletingSecret(null);
+  };
+
   if (loading) {
     return <div className="min-h-screen bg-[#0A0B0E] flex items-center justify-center text-gray-500 font-mono text-xs uppercase tracking-widest">Initializing Secure Connection...</div>;
   }
@@ -137,11 +171,7 @@ export default function App() {
                 currentRole={currentRole as Role}
                 onEdit={handleOpenEdit}
                 onRotate={handleOpenRotate}
-                onDelete={(s) => {
-                  if (confirm(`Are you sure you want to delete ${s.key}?`)) {
-                    deleteSecret(s.id);
-                  }
-                }}
+                onDelete={(secret) => setDeletingSecret(secret)}
                 onReveal={revealSecret}
               />
             ) : (
@@ -163,6 +193,13 @@ export default function App() {
         onClose={() => setIsRotateModalOpen(false)}
         onConfirm={handleConfirmRotate}
         secret={rotatingSecret}
+      />
+
+      <DeleteSecretModal
+        secret={deletingSecret}
+        email={currentUser?.email}
+        onClose={() => setDeletingSecret(null)}
+        onConfirm={handleConfirmDelete}
       />
     </div>
   );
