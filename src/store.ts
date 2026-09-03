@@ -105,11 +105,26 @@ export function useSecretsManager() {
     await refresh();
   };
 
-  const deleteSecret = async (id: string) => {
+  const requestDeleteApproval = async (id: string, password: string) => {
+    if (!currentUser) throw new Error('You must be signed in.');
+
+    return vaultxApi<{ token: string; expiresInSeconds: number }>(
+      '/api/auth/step-up/delete',
+      {
+        method: 'POST',
+        body: JSON.stringify({ secretId: id, password }),
+      },
+    );
+  };
+
+  const deleteSecret = async (id: string, stepUpToken: string) => {
     if (!currentUser) return;
 
     await vaultxApi(`/api/secrets/${id}`, {
       method: 'DELETE',
+      headers: {
+        'X-VAULTX-Step-Up': stepUpToken,
+      },
     });
 
     await refresh();
@@ -135,6 +150,7 @@ export function useSecretsManager() {
     addSecret,
     updateSecret,
     rotateSecret,
+    requestDeleteApproval,
     deleteSecret,
     revealSecret,
   };
