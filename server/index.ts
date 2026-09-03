@@ -161,7 +161,7 @@ async function authenticate(
 
 async function getUserRole(client: SupabaseClient, userId: string) {
   const { data } = await client
-    .from('users')
+    .from('profiles')
     .select('role')
     .eq('id', userId)
     .maybeSingle();
@@ -181,11 +181,11 @@ async function writeAudit(
   const { error } = await client.from('audit_logs').insert([
     {
       action,
-      secretId,
-      secretKey,
+      secret_id: secretId,
+      secret_key: secretKey,
       details,
-      userRole: role,
-      userId: user.id,
+      user_role: role,
+      owner_id: user.id,
     },
   ]);
 
@@ -473,8 +473,8 @@ app.get('/api/audit-logs', async (req, res) => {
     const { data, error } = await auth.client
       .from('audit_logs')
       .select('*')
-      .eq('userId', auth.user.id)
-      .order('timestamp', { ascending: false });
+      .eq('owner_id', auth.user.id)
+      .order('created_at', { ascending: false });
 
     if (error) {
       res.status(400).json({ error: error.message });
