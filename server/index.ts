@@ -166,49 +166,54 @@ async function getUserRole(client: SupabaseClient, userId: string) {
     .eq('id', userId)
     .maybeSingle();
 
-  return data?.role || 'Developer';
+  return data?.role || 'Viewer';
 }
 
 async function writeAudit(
   client: SupabaseClient,
   user: User,
   action: string,
-  secretId: string,
+  secretId: string | null,
   secretKey: string,
   details: string,
 ) {
   const role = await getUserRole(client, user.id);
-  const { error } = await client.from('audit_logs').insert([
-    {
-      action,
-      secret_id: secretId,
-      secret_key: secretKey,
-      details,
-      user_role: role,
-      owner_id: user.id,
-    },
-  ]);
+  const auditRow: Record<string, unknown> = {
+    action,
+    secret_key: secretKey,
+    details,
+    user_role: role,
+    owner_id: user.id,
+  };
+
+  if (secretId) {
+    auditRow.secret_id = secretId;
+  }
+
+  const { error } = await client.from('audit_logs').insert([auditRow]);
 
   if (error) {
     console.warn('VAULTX audit write failed:', error.message);
   }
 }
 
-function serializeSecret(row: Record<string, any>) {
+function serializeSecretMetadata(row: Record<string, any>) {
   const decoded = decodeFields(row.value);
+  const fieldNames = decoded.decryptionError ? [] : Object.keys(decoded.fields);
 
   return {
     id: row.id,
     key: row.key,
     provider: row.provider,
     type: row.type,
-    fields: decoded.fields,
     environment: row.environment,
     description: row.description || '',
     createdAt: row.created_at,
     lastRotatedAt: row.last_rotated_at || row.created_at,
     tags: row.tags || [],
     ownerId: row.owner_id,
+    fieldCount: fieldNames.length,
+    fieldNames,
     decryptionError: decoded.decryptionError,
   };
 }
@@ -237,7 +242,7 @@ app.get('/api/secrets', async (req, res) => {
       return;
     }
 
-    res.json((data || []).map(serializeSecret));
+    res.json((data || []).map(serializeSecretMetadata));
   } catch {
     res.status(500).json({ error: 'Failed to load secrets.' });
   }
@@ -248,7 +253,7 @@ app.post('/api/secrets', async (req, res) => {
     const auth = await authenticate(req, res);
     if (!auth) return;
 
-    const { key, environment, description = '', fields } = req.body || {};
+    const { key, provider, type, environment, description = '', tags = [], fields } = req.body || {};
 
     if (
       typeof key !== 'string' ||
@@ -267,8 +272,13 @@ app.post('/api/secrets', async (req, res) => {
       .insert([
         {
           key: key.trim(),
+          provider: typeof provider === 'string' && provider.trim() ? provider.trim() : null,
+          type: typeof type === 'string' && type.trim() ? type.trim() : null,
           environment,
           description,
+          tags: Array.isArray(tags)
+            ? tags.filter((tag) => typeof tag === 'string').slice(0, 20)
+            : [],
           value: encryptedValue,
           owner_id: auth.user.id,
         },
@@ -290,9 +300,60 @@ app.post('/api/secrets', async (req, res) => {
       `Created new secret ${data.key} in ${data.environment}`,
     );
 
-    res.status(201).json(serializeSecret(data));
+    res.status(201).json(serializeSecretMetadata(data));
   } catch {
     res.status(500).json({ error: 'Failed to create secret.' });
+  }
+});
+
+app.get('/api/secrets/:id/reveal', async (req, res) => {
+  try {
+    const auth = await authenticate(req, res);
+    if (!auth) return;
+
+    const role = await getUserRole(auth.client, auth.user.id);
+    if (role === 'Viewer') {
+      res.status(403).json({ error: 'You do not have permission to reveal secrets.' });
+      return;
+    }
+
+    const { data, error } = await auth.client
+      .from('secrets')
+      .select('id,key,value')
+      .eq('id', req.params.id)
+      .eq('owner_id', auth.user.id)
+      .maybeSingle();
+
+    if (error) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    if (!data) {
+      res.status(404).json({ error: 'Secret not found.' });
+      return;
+    }
+
+    const decoded = decodeFields(data.value);
+    if (decoded.decryptionError) {
+      res.status(422).json({ error: decoded.decryptionError });
+      return;
+    }
+
+    await writeAudit(
+      auth.client,
+      auth.user,
+      'ACCESSED',
+      data.id,
+      data.key,
+      `Revealed decrypted value of ${data.key}`,
+    );
+
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.json({ fields: decoded.fields });
+  } catch {
+    res.status(500).json({ error: 'Failed to reveal secret.' });
   }
 });
 
@@ -318,7 +379,7 @@ app.patch('/api/secrets/:id', async (req, res) => {
     }
 
     const updates: Record<string, unknown> = {};
-    const { key, environment, description, fields, rotate } = req.body || {};
+    const { key, provider, type, environment, description, tags, fields, rotate } = req.body || {};
 
     if (key !== undefined) {
       if (typeof key !== 'string' || !key.trim()) {
@@ -326,6 +387,28 @@ app.patch('/api/secrets/:id', async (req, res) => {
         return;
       }
       updates.key = key.trim();
+    }
+    if (provider !== undefined) {
+      if (provider !== null && typeof provider !== 'string') {
+        res.status(400).json({ error: 'Invalid provider.' });
+        return;
+      }
+      updates.provider =
+        typeof provider === 'string' && provider.trim() ? provider.trim() : null;
+    }
+    if (type !== undefined) {
+      if (type !== null && typeof type !== 'string') {
+        res.status(400).json({ error: 'Invalid credential type.' });
+        return;
+      }
+      updates.type = typeof type === 'string' && type.trim() ? type.trim() : null;
+    }
+    if (tags !== undefined) {
+      if (!Array.isArray(tags) || !tags.every((tag) => typeof tag === 'string')) {
+        res.status(400).json({ error: 'Invalid tags.' });
+        return;
+      }
+      updates.tags = tags.slice(0, 20);
     }
     if (environment !== undefined) {
       if (typeof environment !== 'string') {
@@ -376,7 +459,7 @@ app.patch('/api/secrets/:id', async (req, res) => {
         : `Updated secret ${data.key}`,
     );
 
-    res.json(serializeSecret(data));
+    res.json(serializeSecretMetadata(data));
   } catch {
     res.status(500).json({ error: 'Failed to update secret.' });
   }
@@ -418,7 +501,7 @@ app.delete('/api/secrets/:id', async (req, res) => {
       auth.client,
       auth.user,
       'DELETED',
-      existing.id,
+      null,
       existing.key,
       `Deleted secret ${existing.key}`,
     );
@@ -426,42 +509,6 @@ app.delete('/api/secrets/:id', async (req, res) => {
     res.status(204).end();
   } catch {
     res.status(500).json({ error: 'Failed to delete secret.' });
-  }
-});
-
-app.post('/api/secrets/:id/access', async (req, res) => {
-  try {
-    const auth = await authenticate(req, res);
-    if (!auth) return;
-
-    const { data, error } = await auth.client
-      .from('secrets')
-      .select('id,key')
-      .eq('id', req.params.id)
-      .eq('owner_id', auth.user.id)
-      .maybeSingle();
-
-    if (error) {
-      res.status(400).json({ error: error.message });
-      return;
-    }
-    if (!data) {
-      res.status(404).json({ error: 'Secret not found.' });
-      return;
-    }
-
-    await writeAudit(
-      auth.client,
-      auth.user,
-      'ACCESSED',
-      data.id,
-      data.key,
-      `Viewed decrypted value of ${data.key}`,
-    );
-
-    res.status(204).end();
-  } catch {
-    res.status(500).json({ error: 'Failed to log access.' });
   }
 });
 
@@ -481,7 +528,17 @@ app.get('/api/audit-logs', async (req, res) => {
       return;
     }
 
-    res.json(data || []);
+    res.json(
+      (data || []).map((row) => ({
+        id: row.id,
+        secretId: row.secret_id || undefined,
+        secretKey: row.secret_key || undefined,
+        action: row.action,
+        details: row.details,
+        timestamp: row.created_at,
+        userRole: row.user_role,
+      })),
+    );
   } catch {
     res.status(500).json({ error: 'Failed to load audit logs.' });
   }
